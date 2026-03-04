@@ -1,5 +1,5 @@
-import { Queue, Worker, QueueEvents } from "bullmq";
-import type Redis from "ioredis";
+import { Queue } from "bullmq";
+import type { ConnectionOptions } from "bullmq";
 
 export const BOOKING_QUEUE = "booking";
 export const JOB_NAME = "poll-and-book";
@@ -9,25 +9,19 @@ export interface BookingJobData {
   userId: string;
 }
 
-let bookingQueue: Queue<BookingJobData> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let bookingQueue: Queue<BookingJobData, any, string> | null = null;
 
-export function getBookingQueue(connection: Redis): Queue<BookingJobData> {
+export function getBookingQueue(
+  connection: ConnectionOptions
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Queue<BookingJobData, any, string> {
   if (!bookingQueue) {
     bookingQueue = new Queue<BookingJobData>(BOOKING_QUEUE, { connection });
   }
   return bookingQueue;
 }
 
-export function makeRepeatableJobKey(taskId: string): string {
-  return `task:${taskId}`;
-}
-
-/**
- * Calculate the cron schedule for a booking task.
- * Peak hours (9AM-11PM): every 30 seconds.
- * Off-peak: every 5 minutes.
- * We use two separate repeatable jobs with different cron expressions.
- */
 export function getPeakCron(): string {
   return "*/30 * 9-22 * * *"; // every 30 sec, 9AM-10:59PM
 }

@@ -1,6 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import type { Queue } from "bullmq";
-import type Redis from "ioredis";
+import type { Queue, ConnectionOptions } from "bullmq";
 import { getBookingQueue, getPeakCron, getOffPeakCron, JOB_NAME } from "./queue";
 import type { BookingJobData } from "./queue";
 
@@ -9,7 +8,7 @@ import type { BookingJobData } from "./queue";
  */
 export async function scheduleActiveTasks(
   prisma: PrismaClient,
-  redis: Redis
+  redis: ConnectionOptions
 ): Promise<void> {
   const queue = getBookingQueue(redis);
 
