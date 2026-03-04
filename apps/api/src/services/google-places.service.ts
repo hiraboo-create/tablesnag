@@ -3,100 +3,106 @@ import type { AutocompleteResult, PlaceDetails } from "@tablesnag/shared";
 import { config } from "../config";
 
 const CACHE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
+const YELP_BASE = "https://api.yelp.com/v3";
+
+interface YelpBusiness {
+  id: string;
+  name: string;
+  location: {
+    display_address: string[];
+    city: string;
+    state: string;
+  };
+  rating?: number;
+  price?: string; // "$", "$$", "$$$", "$$$$"
+  image_url?: string;
+  categories?: Array<{ alias: string; title: string }>;
+  coordinates?: { latitude: number; longitude: number };
+  phone?: string;
+  url?: string;
+  hours?: Array<{ is_open_now: boolean; open: unknown[] }>;
+}
+
+function priceToLevel(price?: string): number | undefined {
+  if (!price) return undefined;
+  return price.length; // "$"=1, "$$"=2, "$$$"=3, "$$$$"=4
+}
 
 export class GooglePlacesService {
   private readonly apiKey: string;
-  private readonly baseUrl = "https://maps.googleapis.com/maps/api/place";
 
   constructor(private readonly redis: Redis) {
-    this.apiKey = config.GOOGLE_PLACES_API_KEY ?? "";
+    this.apiKey = config.YELP_API_KEY ?? "";
   }
 
-  async autocomplete(
-    query: string,
-    sessionToken: string
-  ): Promise<AutocompleteResult[]> {
+  private get headers() {
+    return { Authorization: `Bearer ${this.apiKey}` };
+  }
+
+  async autocomplete(query: string, _sessionToken: string): Promise<AutocompleteResult[]> {
+    if (!this.apiKey) return [];
+
     const params = new URLSearchParams({
-      input: query,
-      types: "restaurant|food|cafe|bar",
-      sessiontoken: sessionToken,
-      key: this.apiKey,
+      term: query,
+      location: "United States",
+      categories: "restaurants,food,bars",
+      limit: "10",
     });
 
-    const res = await fetch(`${this.baseUrl}/autocomplete/json?${params}`);
-    if (!res.ok) throw new Error(`Places autocomplete error: ${res.status}`);
+    const res = await fetch(`${YELP_BASE}/businesses/search?${params}`, {
+      headers: this.headers,
+    });
+
+    if (!res.ok) return [];
 
     const data = await res.json();
+    const businesses: YelpBusiness[] = data.businesses ?? [];
 
-    return (data.predictions ?? []).map((p: Record<string, unknown>) => ({
-      placeId: p.place_id as string,
-      description: p.description as string,
+    return businesses.map((b) => ({
+      placeId: b.id,
+      description: `${b.name}, ${b.location.city}, ${b.location.state}`,
       structuredFormatting: {
-        mainText: (p.structured_formatting as Record<string, string>)?.main_text ?? "",
-        secondaryText: (p.structured_formatting as Record<string, string>)?.secondary_text ?? "",
+        mainText: b.name,
+        secondaryText: b.location.display_address.join(", "),
       },
     }));
   }
 
   async getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
-    const cacheKey = `places:details:${placeId}`;
+    const cacheKey = `yelp:details:${placeId}`;
     const cached = await this.redis.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached) as PlaceDetails;
-    }
+    if (cached) return JSON.parse(cached) as PlaceDetails;
 
-    const params = new URLSearchParams({
-      place_id: placeId,
-      fields: [
-        "place_id",
-        "name",
-        "formatted_address",
-        "rating",
-        "price_level",
-        "photos",
-        "types",
-        "geometry",
-        "formatted_phone_number",
-        "website",
-        "opening_hours",
-      ].join(","),
-      key: this.apiKey,
+    if (!this.apiKey) return null;
+
+    const res = await fetch(`${YELP_BASE}/businesses/${encodeURIComponent(placeId)}`, {
+      headers: this.headers,
     });
 
-    const res = await fetch(`${this.baseUrl}/details/json?${params}`);
-    if (!res.ok) throw new Error(`Places details error: ${res.status}`);
+    if (!res.ok) return null;
 
-    const data = await res.json();
-    const r = data.result;
-    if (!r) return null;
+    const b: YelpBusiness = await res.json();
 
     const details: PlaceDetails = {
-      placeId: r.place_id,
-      name: r.name,
-      address: r.formatted_address,
-      rating: r.rating,
-      priceLevel: r.price_level,
-      photoReference: r.photos?.[0]?.photo_reference,
-      types: r.types ?? [],
+      placeId: b.id,
+      name: b.name,
+      address: b.location.display_address.join(", "),
+      rating: b.rating,
+      priceLevel: priceToLevel(b.price),
+      photoUrl: b.image_url,
+      types: (b.categories ?? []).map((c) => c.alias),
       location: {
-        lat: r.geometry?.location?.lat ?? 0,
-        lng: r.geometry?.location?.lng ?? 0,
+        lat: b.coordinates?.latitude ?? 0,
+        lng: b.coordinates?.longitude ?? 0,
       },
-      phoneNumber: r.formatted_phone_number,
-      website: r.website,
-      openingHours: r.opening_hours
-        ? {
-            openNow: r.opening_hours.open_now ?? false,
-            weekdayText: r.opening_hours.weekday_text ?? [],
-          }
+      phoneNumber: b.phone,
+      website: b.url,
+      openingHours: b.hours?.[0]
+        ? { openNow: b.hours[0].is_open_now, weekdayText: [] }
         : undefined,
     };
 
     await this.redis.setex(cacheKey, CACHE_TTL_SECONDS, JSON.stringify(details));
     return details;
-  }
-
-  getPhotoUrl(photoReference: string, maxWidth = 400): string {
-    return `${this.baseUrl}/photo?maxwidth=${maxWidth}&photo_reference=${photoReference}&key=${this.apiKey}`;
   }
 }

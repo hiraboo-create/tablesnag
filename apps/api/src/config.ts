@@ -9,6 +9,7 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(16),
   ENCRYPTION_KEY: z.string().length(64, "ENCRYPTION_KEY must be a 64-char hex string (32 bytes)"),
   GOOGLE_PLACES_API_KEY: z.string().optional(),
+  YELP_API_KEY: z.string().optional(),
   RESY_API_KEY: z.string().optional(),
   RESY_AUTH_TOKEN: z.string().optional(),
   OPENTABLE_CLIENT_ID: z.string().optional(),

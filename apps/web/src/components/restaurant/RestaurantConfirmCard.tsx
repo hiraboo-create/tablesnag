@@ -10,9 +10,7 @@ interface Props {
 }
 
 export function RestaurantConfirmCard({ details }: Props) {
-  const photoUrl = details.photoReference
-    ? `${process.env.NEXT_PUBLIC_API_URL}/restaurants/photo?ref=${details.photoReference}`
-    : null;
+  const photoUrl = details.photoUrl ?? null;
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 flex gap-4">

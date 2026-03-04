@@ -13,7 +13,8 @@ export interface GooglePlace {
   address: string;
   rating?: number;
   priceLevel?: number; // 0-4
-  photoReference?: string;
+  photoReference?: string; // kept for back-compat
+  photoUrl?: string;       // direct image URL (Yelp, etc.)
   types: string[];
   location: {
     lat: number;
