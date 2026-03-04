@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import type { ConnectionOptions } from "bullmq";
+import { config } from "../config";
 
 export const BOOKING_QUEUE = "booking";
 export const JOB_NAME = "poll-and-book";
@@ -9,15 +9,27 @@ export interface BookingJobData {
   userId: string;
 }
 
+// BullMQ connection options from env — avoids ioredis version conflicts
+export function getBullMQConnection() {
+  const url = new URL(config.REDIS_URL);
+  return {
+    host: url.hostname,
+    port: Number(url.port) || 6379,
+    username: url.username || undefined,
+    password: url.password || undefined,
+    tls: url.protocol === "rediss:" ? {} : undefined,
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let bookingQueue: Queue<BookingJobData, any, string> | null = null;
 
-export function getBookingQueue(
-  connection: ConnectionOptions
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Queue<BookingJobData, any, string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getBookingQueue(): Queue<BookingJobData, any, string> {
   if (!bookingQueue) {
-    bookingQueue = new Queue<BookingJobData>(BOOKING_QUEUE, { connection });
+    bookingQueue = new Queue<BookingJobData>(BOOKING_QUEUE, {
+      connection: getBullMQConnection(),
+    });
   }
   return bookingQueue;
 }
