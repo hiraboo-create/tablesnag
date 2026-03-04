@@ -42,30 +42,39 @@ export class GooglePlacesService {
   async autocomplete(query: string, _sessionToken: string): Promise<AutocompleteResult[]> {
     if (!this.apiKey) return [];
 
-    const params = new URLSearchParams({
-      term: query,
-      location: "United States",
-      categories: "restaurants,food,bars",
-      limit: "10",
-    });
-
-    const res = await fetch(`${YELP_BASE}/businesses/search?${params}`, {
+    // Use Yelp autocomplete for accurate name matching
+    const params = new URLSearchParams({ text: query });
+    const res = await fetch(`${YELP_BASE}/autocomplete?${params}`, {
       headers: this.headers,
     });
-
     if (!res.ok) return [];
 
     const data = await res.json();
-    const businesses: YelpBusiness[] = data.businesses ?? [];
+    const suggestions: Array<{ id: string; name: string }> = data.businesses ?? [];
+    if (suggestions.length === 0) return [];
 
-    return businesses.map((b) => ({
-      placeId: b.id,
-      description: `${b.name}, ${b.location.city}, ${b.location.state}`,
-      structuredFormatting: {
-        mainText: b.name,
-        secondaryText: b.location.display_address.join(", "),
-      },
-    }));
+    // Fetch details in parallel to get addresses (up to 5)
+    const details = await Promise.allSettled(
+      suggestions.slice(0, 5).map((b) =>
+        fetch(`${YELP_BASE}/businesses/${encodeURIComponent(b.id)}`, {
+          headers: this.headers,
+        }).then((r) => (r.ok ? (r.json() as Promise<YelpBusiness>) : null))
+      )
+    );
+
+    return details
+      .map((r, i) => {
+        const b = r.status === "fulfilled" && r.value ? r.value : null;
+        const name = suggestions[i].name;
+        const id = suggestions[i].id;
+        const address = b?.location.display_address.join(", ") ?? "";
+        const city = b ? `${b.location.city}, ${b.location.state}` : "";
+        return {
+          placeId: id,
+          description: city ? `${name}, ${city}` : name,
+          structuredFormatting: { mainText: name, secondaryText: address },
+        };
+      });
   }
 
   async getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
