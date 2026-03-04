@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  emailVerified Boolean  @default(false)
+  verifyToken   String?  @unique
+  resetToken    String?  @unique
+  resetTokenExp DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  connections    PlatformConnection[]
+  paymentMethods PaymentMethod[]
+  tasks          BookingTask[]
+  reservations   Reservation[]
+  refreshTokens  RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PlatformConnection {
+  id               String   @id @default(cuid())
+  userId           String
+  platform         Platform
+  platformUserId   String?
+  platformEmail    String?
+  encryptedToken   String   // AES-256 encrypted auth token
+  isActive         Boolean  @default(true)
+  connectedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform])
+  @@index([userId])
+}
+
+model PaymentMethod {
+  id                    String   @id @default(cuid())
+  userId                String
+  stripeCustomerId      String
+  stripePaymentMethodId String   @unique
+  brand                 String
+  last4                 String
+  expMonth              Int
+  expYear               Int
+  isDefault             Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks BookingTask[]
+
+  @@index([userId])
+}
+
+model BookingTask {
+  id               String     @id @default(cuid())
+  userId           String
+  restaurantId     String     // Google Place ID
+  restaurantName   String
+  restaurantAddress String?
+  platforms        Platform[]
+  partySize        Int
+  dateRangeStart   DateTime
+  dateRangeEnd     DateTime
+  timeWindowStart  String     // "HH:MM"
+  timeWindowEnd    String     // "HH:MM"
+  status           TaskStatus @default(MONITORING)
+  paymentMethodId  String?
+  lastCheckedAt    DateTime?
+  bullJobId        String?    // BullMQ repeatable job key
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  reservations  Reservation[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Reservation {
+  id                    String            @id @default(cuid())
+  userId                String
+  taskId                String
+  platform              Platform
+  restaurantName        String
+  confirmationNumber    String?
+  platformReservationId String?
+  partySize             Int
+  date                  DateTime
+  time                  String            // "HH:MM"
+  status                ReservationStatus @default(CONFIRMED)
+  slotData              Json?             // Raw slot info
+  bookedAt              DateTime          @default(now())
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task BookingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([taskId])
+}
+
+enum Platform {
+  RESY
+  OPENTABLE
+}
+
+enum TaskStatus {
+  MONITORING
+  PAUSED
+  BOOKED
+  FAILED
+  CANCELLED
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
