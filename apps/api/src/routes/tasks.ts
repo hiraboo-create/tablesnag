@@ -25,7 +25,7 @@ const updateTaskSchema = z.object({
 });
 
 export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
-  const queue = getBookingQueue(fastify.redis);
+  const queue = getBookingQueue();
 
   // GET /tasks
   fastify.get<{ Querystring: { page?: string; pageSize?: string; status?: string } }>(

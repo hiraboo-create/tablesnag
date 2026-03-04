@@ -15,7 +15,7 @@ async function main() {
   await app.listen({ port: config.PORT, host: "0.0.0.0" });
   app.log.info(`API listening on port ${config.PORT}`);
 
-  await scheduleActiveTasks(app.prisma, app.redis);
+  await scheduleActiveTasks(app.prisma);
 
   const workerRedis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
   const worker = new Worker<BookingJobData>(

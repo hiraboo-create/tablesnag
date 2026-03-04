@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import type { Queue, ConnectionOptions } from "bullmq";
+import type { Queue } from "bullmq";
 import { getBookingQueue, getPeakCron, getOffPeakCron, JOB_NAME } from "./queue";
 import type { BookingJobData } from "./queue";
 
@@ -7,10 +7,9 @@ import type { BookingJobData } from "./queue";
  * On startup, enqueue repeatable BullMQ jobs for all MONITORING tasks.
  */
 export async function scheduleActiveTasks(
-  prisma: PrismaClient,
-  redis: ConnectionOptions
+  prisma: PrismaClient
 ): Promise<void> {
-  const queue = getBookingQueue(redis);
+  const queue = getBookingQueue();
 
   const activeTasks = await prisma.bookingTask.findMany({
     where: { status: "MONITORING" },
