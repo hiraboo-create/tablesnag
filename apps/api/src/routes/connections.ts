@@ -122,6 +122,64 @@ export async function connectionRoutes(fastify: FastifyInstance): Promise<void> 
     }
   );
 
+  // POST /connections/opentable/login — exchange OpenTable email+password for auth token
+  fastify.post(
+    "/connections/opentable/login",
+    { preHandler: [fastify.authenticate] },
+    async (req, reply) => {
+      const body = z.object({
+        email: z.string().email(),
+        password: z.string().min(1),
+      }).safeParse(req.body);
+      if (!body.success) {
+        return reply.status(400).send({ error: "Email and password required", statusCode: 400 });
+      }
+
+      const res = await fetch("https://www.opentable.com/api/auth/user/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Mozilla/5.0 (compatible)",
+          Origin: "https://www.opentable.com",
+          Referer: "https://www.opentable.com/",
+        },
+        body: JSON.stringify({ email: body.data.email, password: body.data.password, rememberMe: true }),
+      });
+
+      if (res.status === 401 || res.status === 422 || res.status === 403) {
+        return reply.status(401).send({ error: "Invalid OpenTable email or password", statusCode: 401 });
+      }
+      if (!res.ok) {
+        return reply.status(502).send({ error: "OpenTable login failed", statusCode: 502 });
+      }
+
+      const data = await res.json();
+      // OpenTable returns token in different fields depending on API version
+      const token: string = data.token ?? data.access_token ?? data.authToken ?? "";
+      if (!token) {
+        return reply.status(502).send({ error: "OpenTable did not return a token", statusCode: 502 });
+      }
+
+      const platformUserId = String(data.id ?? data.userId ?? data.user?.id ?? "");
+      const encryptedToken = encryptionService.encrypt(token);
+
+      const connection = await fastify.prisma.platformConnection.upsert({
+        where: { userId_platform: { userId: req.user.sub, platform: Platform.OPENTABLE } },
+        update: { encryptedToken, platformEmail: body.data.email, platformUserId, isActive: true },
+        create: {
+          userId: req.user.sub,
+          platform: Platform.OPENTABLE,
+          encryptedToken,
+          platformEmail: body.data.email,
+          platformUserId,
+        },
+        select: { id: true, platform: true, platformUserId: true, platformEmail: true, isActive: true, connectedAt: true },
+      });
+
+      return reply.status(201).send({ data: connection });
+    }
+  );
+
   // DELETE /connections/:platform
   fastify.delete<{ Params: { platform: string } }>(
     "/connections/:platform",

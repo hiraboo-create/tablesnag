@@ -24,6 +24,8 @@ export function PlatformConnectButton({ platform, connected, onConnect }: Props)
   const [error, setError] = useState<string | null>(null);
 
   const isResy = platform === Platform.RESY;
+  const isOpenTable = platform === Platform.OPENTABLE;
+  const useCredentials = isResy || isOpenTable;
 
   const handleConnect = async () => {
     setIsLoading(true);
@@ -31,6 +33,8 @@ export function PlatformConnectButton({ platform, connected, onConnect }: Props)
     try {
       if (isResy) {
         await api.post("/connections/resy/login", { email, password });
+      } else if (isOpenTable) {
+        await api.post("/connections/opentable/login", { email, password });
       } else {
         await api.post("/connections", { platform, authToken: token, email: email || undefined });
       }
@@ -46,7 +50,7 @@ export function PlatformConnectButton({ platform, connected, onConnect }: Props)
     }
   };
 
-  const canSubmit = isResy ? email.trim() && password.trim() : token.trim();
+  const canSubmit = useCredentials ? email.trim() && password.trim() : token.trim();
 
   return (
     <div className="border border-gray-100 rounded-lg p-4 space-y-3">
@@ -70,20 +74,20 @@ export function PlatformConnectButton({ platform, connected, onConnect }: Props)
 
       {showForm && (
         <div className="space-y-2">
-          {isResy ? (
+          {useCredentials ? (
             <>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Resy account email"
+                placeholder={`${PLATFORM_LABELS[platform]} account email`}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
               />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Resy account password"
+                placeholder={`${PLATFORM_LABELS[platform]} account password`}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
               />
               <p className="text-xs text-gray-400">
