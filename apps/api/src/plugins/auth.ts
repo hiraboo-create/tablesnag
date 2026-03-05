@@ -19,7 +19,7 @@ declare module "fastify" {
 export default fp(async (fastify) => {
   fastify.register(fastifyJwt, {
     secret: config.JWT_SECRET,
-    sign: { expiresIn: "15m" },
+    sign: { expiresIn: "7d" },
   });
 
   fastify.decorate(

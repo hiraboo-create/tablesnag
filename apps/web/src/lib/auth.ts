@@ -1,8 +1,29 @@
 import type { NextAuthOptions } from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 
 const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+async function refreshAccessToken(token: JWT): Promise<JWT> {
+  try {
+    const res = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken: token.refreshToken }),
+    });
+    if (!res.ok) throw new Error("Refresh failed");
+    const { data } = await res.json();
+    return {
+      ...token,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      accessTokenExpires: Date.now() + 6 * 24 * 60 * 60 * 1000, // 6 days
+    };
+  } catch {
+    return { ...token, error: "RefreshAccessTokenError" };
+  }
+}
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
@@ -53,8 +74,14 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = (user as { accessToken?: string }).accessToken;
         token.refreshToken = (user as { refreshToken?: string }).refreshToken;
         token.sub = user.id;
+        token.accessTokenExpires = Date.now() + 6 * 24 * 60 * 60 * 1000; // 6 days
       }
-      return token;
+      // Return token if still valid
+      if (Date.now() < (token.accessTokenExpires as number ?? 0)) {
+        return token;
+      }
+      // Access token expired — refresh it
+      return refreshAccessToken(token);
     },
     async session({ session, token }) {
       (session as { accessToken?: string }).accessToken = token.accessToken as string;
