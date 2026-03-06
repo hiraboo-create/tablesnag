@@ -190,7 +190,7 @@ async function handleSuccessfulBooking(
       date: new Date(`${slot.date}T${slot.time}:00`),
       time: slot.time,
       status: "CONFIRMED",
-      slotData: slot as unknown as Record<string, unknown>,
+      slotData: JSON.parse(JSON.stringify(slot)),
     },
   });
 

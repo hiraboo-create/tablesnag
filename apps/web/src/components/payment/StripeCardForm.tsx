@@ -61,16 +61,18 @@ export function StripeCardForm({ onSuccess }: Props) {
       }
 
       const cardData = { number: rawNumber, exp_month: expMonth, exp_year: expYear, cvc };
+      const pmArgs = {
+        type: "card",
+        card: cardData,
+        billing_details: { name: name || undefined },
+      };
 
       // ── Tokenize on our Stripe account ───────────────────────────
       const ourStripe = await getOurStripe();
       if (!ourStripe) throw new Error("Stripe failed to load");
 
-      const { paymentMethod: ourPM, error: ourError } = await ourStripe.createPaymentMethod({
-        type: "card",
-        card: cardData,
-        billing_details: { name: name || undefined },
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { paymentMethod: ourPM, error: ourError } = await (ourStripe as any).createPaymentMethod(pmArgs) as Awaited<ReturnType<typeof ourStripe.createPaymentMethod>>;
       if (ourError) throw new Error(ourError.message ?? "Card declined");
 
       // ── Tokenize on Resy's Stripe account (best-effort) ──────────
@@ -78,11 +80,8 @@ export function StripeCardForm({ onSuccess }: Props) {
       try {
         const resyStripe = await getResyStripe();
         if (resyStripe) {
-          const { paymentMethod: resyPM } = await resyStripe.createPaymentMethod({
-            type: "card",
-            card: cardData,
-            billing_details: { name: name || undefined },
-          });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { paymentMethod: resyPM } = await (resyStripe as any).createPaymentMethod(pmArgs) as Awaited<ReturnType<typeof resyStripe.createPaymentMethod>>;
           resyStripePaymentMethodId = resyPM?.id;
         }
       } catch {
