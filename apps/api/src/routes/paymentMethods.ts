@@ -1,9 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { stripeService } from "../services/stripe.service";
+import { encryptionService } from "../services/encryption.service";
+import { config } from "../config";
+import { Platform } from "@tablesnag/shared";
 
 const addPaymentSchema = z.object({
   paymentMethodId: z.string().min(1),
+  resyStripePaymentMethodId: z.string().optional(), // Stripe PM ID on Resy's account
 });
 
 export async function paymentMethodRoutes(fastify: FastifyInstance): Promise<void> {
@@ -66,6 +70,43 @@ export async function paymentMethodRoutes(fastify: FastifyInstance): Promise<voi
 
       if (isFirstMethod) {
         await stripeService.setDefaultPaymentMethod(stripeCustomerId, stripePm.id);
+      }
+
+      // ── Register card on Resy's Stripe account if PM provided ────
+      if (body.data.resyStripePaymentMethodId && config.RESY_PROXY_URL && config.RESY_PROXY_SECRET) {
+        try {
+          const resyConn = await fastify.prisma.platformConnection.findFirst({
+            where: { userId: req.user.sub, platform: Platform.RESY, isActive: true },
+          });
+          if (resyConn) {
+            const authToken = encryptionService.decrypt(resyConn.encryptedToken);
+            const resyRes = await fetch(`${config.RESY_PROXY_URL}/resy/stripe-payment-method`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Proxy-Secret": config.RESY_PROXY_SECRET,
+                "X-Resy-Auth-Token": authToken,
+              },
+              body: JSON.stringify({ payment_method_id: body.data.resyStripePaymentMethodId }),
+            });
+            if (resyRes.ok) {
+              const resyData = await resyRes.json() as Record<string, unknown>;
+              // Resy returns the internal payment method ID
+              const resyPaymentMethodId =
+                String(resyData.id ?? resyData.payment_method_id ?? "");
+              if (resyPaymentMethodId) {
+                await fastify.prisma.platformConnection.update({
+                  where: { id: resyConn.id },
+                  data: { resyPaymentMethodId },
+                });
+              }
+            } else {
+              fastify.log.warn(`Resy payment method registration failed: ${resyRes.status} ${await resyRes.text()}`);
+            }
+          }
+        } catch (err) {
+          fastify.log.warn(`Could not register card on Resy: ${String(err)}`);
+        }
       }
 
       return reply.status(201).send({ data: pm });

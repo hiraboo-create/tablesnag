@@ -74,15 +74,22 @@ export async function processBookingJob(
 
       let found = false;
 
+      // Use platform-specific venue ID; fall back to restaurantId if not resolved yet
+      const venueIds = task.platformVenueIds as Record<string, string> | null;
+      const platformVenueId =
+        venueIds?.[connection.platform] ?? task.restaurantId;
+
       for (let d = new Date(startDate); d <= endDate && !found; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().slice(0, 10);
         const availReq = {
           restaurantId: task.restaurantId,
-          platformVenueId: task.restaurantId, // Google Place ID used as lookup key
+          platformVenueId,
           date: dateStr,
           partySize: task.partySize,
           startTime: task.timeWindowStart,
           endTime: task.timeWindowEnd,
+          lat: task.restaurantLat ?? undefined,
+          lon: task.restaurantLon ?? undefined,
         };
 
         try {

@@ -82,16 +82,29 @@ export async function connectionRoutes(fastify: FastifyInstance): Promise<void> 
         return reply.status(400).send({ error: "Email and password required", statusCode: 400 });
       }
 
-      const res = await fetch("https://api.resy.com/3/auth/password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `ResyAPI api_key="${config.RESY_API_KEY}"`,
-          Origin: "https://resy.com",
-          Referer: "https://resy.com/",
-        },
-        body: new URLSearchParams({ email: body.data.email, password: body.data.password }),
-      });
+      // Use Cloudflare Worker proxy if configured (avoids datacenter IP blocks)
+      let res: Response;
+      if (config.RESY_PROXY_URL && config.RESY_PROXY_SECRET) {
+        res = await fetch(config.RESY_PROXY_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Proxy-Secret": config.RESY_PROXY_SECRET,
+          },
+          body: JSON.stringify({ email: body.data.email, password: body.data.password }),
+        });
+      } else {
+        res = await fetch("https://api.resy.com/3/auth/password", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Authorization: `ResyAPI api_key="${config.RESY_API_KEY}"`,
+            Origin: "https://resy.com",
+            Referer: "https://resy.com/",
+          },
+          body: new URLSearchParams({ email: body.data.email, password: body.data.password }),
+        });
+      }
 
       const resyBody = await res.text();
       fastify.log.warn({ resyStatus: res.status, resyBody }, "Resy auth response");
@@ -180,6 +193,105 @@ export async function connectionRoutes(fastify: FastifyInstance): Promise<void> 
       });
 
       return reply.status(201).send({ data: connection });
+    }
+  );
+
+  // POST /connections/resy/sync-payment — fetch payment methods from Resy and store the default
+  fastify.post(
+    "/connections/resy/sync-payment",
+    { preHandler: [fastify.authenticate] },
+    async (req, reply) => {
+      const connection = await fastify.prisma.platformConnection.findFirst({
+        where: { userId: req.user.sub, platform: Platform.RESY, isActive: true },
+      });
+      if (!connection) {
+        return reply.status(404).send({ error: "No active Resy connection found", statusCode: 404 });
+      }
+
+      if (!config.RESY_PROXY_URL || !config.RESY_PROXY_SECRET) {
+        return reply.status(503).send({ error: "Resy proxy not configured", statusCode: 503 });
+      }
+
+      const authToken = encryptionService.decrypt(connection.encryptedToken);
+      const res = await fetch(`${config.RESY_PROXY_URL}/resy/user`, {
+        headers: {
+          "X-Proxy-Secret": config.RESY_PROXY_SECRET,
+          "X-Resy-Auth-Token": authToken,
+        },
+      });
+
+      if (!res.ok) {
+        return reply.status(502).send({ error: `Resy API error: ${res.status}`, statusCode: 502 });
+      }
+
+      const data = await res.json() as Record<string, unknown>;
+      const paymentMethods = (data.payment_methods as Array<{ id: number; is_default?: boolean }>) ?? [];
+
+      if (paymentMethods.length === 0) {
+        return reply.send({
+          data: {
+            synced: false,
+            message: "No payment methods found on your Resy account. Please add a card at resy.com first.",
+          },
+        });
+      }
+
+      // Prefer the default payment method, otherwise use the first
+      const defaultPm = paymentMethods.find((p) => p.is_default) ?? paymentMethods[0];
+      const resyPaymentMethodId = String(defaultPm.id);
+
+      await fastify.prisma.platformConnection.update({
+        where: { id: connection.id },
+        data: { resyPaymentMethodId },
+      });
+
+      return reply.send({
+        data: {
+          synced: true,
+          resyPaymentMethodId,
+          totalMethods: paymentMethods.length,
+        },
+      });
+    }
+  );
+
+  // GET /connections/resy/payment-methods — list payment methods from Resy profile
+  fastify.get(
+    "/connections/resy/payment-methods",
+    { preHandler: [fastify.authenticate] },
+    async (req, reply) => {
+      const connection = await fastify.prisma.platformConnection.findFirst({
+        where: { userId: req.user.sub, platform: Platform.RESY, isActive: true },
+      });
+      if (!connection) {
+        return reply.status(404).send({ error: "No active Resy connection", statusCode: 404 });
+      }
+
+      if (!config.RESY_PROXY_URL || !config.RESY_PROXY_SECRET) {
+        return reply.status(503).send({ error: "Resy proxy not configured", statusCode: 503 });
+      }
+
+      const authToken = encryptionService.decrypt(connection.encryptedToken);
+      const res = await fetch(`${config.RESY_PROXY_URL}/resy/user`, {
+        headers: {
+          "X-Proxy-Secret": config.RESY_PROXY_SECRET,
+          "X-Resy-Auth-Token": authToken,
+        },
+      });
+
+      if (!res.ok) {
+        return reply.status(502).send({ error: `Resy API error: ${res.status}`, statusCode: 502 });
+      }
+
+      const data = await res.json() as Record<string, unknown>;
+      const paymentMethods = (data.payment_methods as unknown[]) ?? [];
+
+      return reply.send({
+        data: {
+          paymentMethods,
+          storedResyPaymentMethodId: connection.resyPaymentMethodId,
+        },
+      });
     }
   );
 

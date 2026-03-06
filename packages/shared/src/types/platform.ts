@@ -20,6 +20,8 @@ export interface AvailabilityRequest {
   partySize: number;
   startTime: string; // "HH:MM"
   endTime: string; // "HH:MM"
+  lat?: number;
+  lon?: number;
 }
 
 export interface BookingResult {

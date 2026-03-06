@@ -30,6 +30,7 @@ export default function SettingsPage() {
 
   const connections = connectionsData?.data ?? [];
   const paymentMethods = paymentData?.data ?? [];
+  const hasResy = connections.some((c) => c.platform === "RESY" && c.isActive);
 
   if (status === "loading") return null;
 
@@ -62,6 +63,28 @@ export default function SettingsPage() {
         {/* Platform connections */}
         <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
           <h3 className="font-semibold text-gray-900">Platform Connections</h3>
+
+          {/* Resy bookmarklet helper */}
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium text-blue-800">Having trouble connecting Resy?</p>
+            <p className="text-xs text-blue-700">
+              1. Drag the button below to your bookmarks bar<br />
+              2. Go to <strong>resy.com</strong> and log in<br />
+              3. Click the bookmark — it will connect your account automatically
+            </p>
+            <a
+              href={`javascript:(function(){var c={};document.cookie.split(';').forEach(function(x){var p=x.trim().split('=');c[p[0]]=decodeURIComponent(p.slice(1).join('='));});var t=c['authToken']||c['auth_token']||c['resy-auth-token'];if(!t){try{var s=localStorage.getItem('_resy-auth')||localStorage.getItem('resy-auth');if(s){var o=JSON.parse(s);t=o.token||o.authToken;}}catch(e){}}if(t){window.location.href='https://tablesnag.vercel.app/connect/resy?token='+encodeURIComponent(t);}else{alert('Could not find your Resy auth token. Make sure you are logged in at resy.com and try again.');}})();`}
+              onClick={(e) => {
+                e.preventDefault();
+                alert("Drag this button to your bookmarks bar, then click it while on resy.com");
+              }}
+              className="inline-block bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded cursor-grab active:cursor-grabbing select-none"
+              draggable
+            >
+              Connect Resy
+            </a>
+          </div>
+
           {[Platform.RESY, Platform.OPENTABLE].map((platform) => {
             const conn = connections.find((c) => c.platform === platform);
             return (
@@ -77,7 +100,15 @@ export default function SettingsPage() {
 
         {/* Payment methods */}
         <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
-          <h3 className="font-semibold text-gray-900">Payment Methods</h3>
+          <h3 className="font-semibold text-gray-900">Payment Method</h3>
+
+          {hasResy && (
+            <div className="bg-green-50 border border-green-100 rounded-lg p-3 text-xs text-green-700">
+              Cards added here are automatically registered on your connected Resy account — no
+              separate setup needed.
+            </div>
+          )}
+
           {paymentMethods.length === 0 ? (
             <p className="text-sm text-gray-400">No payment methods added.</p>
           ) : (

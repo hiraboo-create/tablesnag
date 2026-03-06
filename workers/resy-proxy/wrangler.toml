@@ -1,0 +1,6 @@
+name = "resy-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Set the secret via: npx wrangler secret put PROXY_SECRET
+# Then add that same value as RESY_PROXY_SECRET in the API's Vercel env vars

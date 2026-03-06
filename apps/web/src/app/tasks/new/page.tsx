@@ -60,6 +60,8 @@ export default function NewTaskPage() {
           placeDetails?.name ?? selectedPlace.structuredFormatting.mainText,
         restaurantAddress:
           placeDetails?.address ?? selectedPlace.structuredFormatting.secondaryText,
+        restaurantLat: placeDetails?.location.lat,
+        restaurantLon: placeDetails?.location.lng,
         platforms,
         partySize,
         dateRangeStart: dateRange.start,

@@ -12,6 +12,8 @@ const envSchema = z.object({
   YELP_API_KEY: z.string().optional(),
   RESY_API_KEY: z.string().optional(),
   RESY_AUTH_TOKEN: z.string().optional(),
+  RESY_PROXY_URL: z.string().url().optional(),
+  RESY_PROXY_SECRET: z.string().optional(),
   OPENTABLE_CLIENT_ID: z.string().optional(),
   OPENTABLE_CLIENT_SECRET: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),

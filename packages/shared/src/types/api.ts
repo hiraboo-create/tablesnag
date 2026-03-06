@@ -40,9 +40,11 @@ export interface AddPaymentMethodRequest {
 
 // Tasks
 export interface CreateTaskRequest {
-  restaurantId: string; // Google Place ID
+  restaurantId: string; // Yelp business ID
   restaurantName: string;
   restaurantAddress?: string;
+  restaurantLat?: number;
+  restaurantLon?: number;
   platforms: Platform[];
   partySize: number;
   dateRangeStart: string; // "YYYY-MM-DD"
