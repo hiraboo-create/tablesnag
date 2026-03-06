@@ -5,6 +5,16 @@ import GoogleProvider from "next-auth/providers/google";
 
 const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+/** Decode the exp claim from a JWT without verifying the signature. */
+function jwtExpiry(token: string): number {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+    return typeof payload.exp === "number" ? payload.exp * 1000 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function refreshAccessToken(token: JWT): Promise<JWT> {
   try {
     const res = await fetch(`${API_URL}/auth/refresh`, {
@@ -14,11 +24,12 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
     });
     if (!res.ok) throw new Error("Refresh failed");
     const { data } = await res.json();
+    const newAccess: string = data.accessToken;
     return {
       ...token,
-      accessToken: data.accessToken,
+      accessToken: newAccess,
       refreshToken: data.refreshToken,
-      accessTokenExpires: Date.now() + 6 * 24 * 60 * 60 * 1000, // 6 days
+      accessTokenExpires: jwtExpiry(newAccess),
     };
   } catch {
     return { ...token, error: "RefreshAccessTokenError" };
@@ -70,17 +81,22 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
+      // New sign-in
       if (user) {
-        token.accessToken = (user as { accessToken?: string }).accessToken;
+        const accessToken = (user as { accessToken?: string }).accessToken ?? "";
+        token.accessToken = accessToken;
         token.refreshToken = (user as { refreshToken?: string }).refreshToken;
         token.sub = user.id;
-        token.accessTokenExpires = Date.now() + 14 * 60 * 1000; // 14 min (API JWT is 15m)
+        // Read actual expiry from the JWT itself
+        token.accessTokenExpires = jwtExpiry(accessToken);
       }
-      // Return token if still valid (with 60s buffer)
+
+      // Still valid (with 60s buffer before actual expiry)?
       if (Date.now() < ((token.accessTokenExpires as number ?? 0) - 60_000)) {
         return token;
       }
-      // Access token expired or about to — refresh it
+
+      // Expired (or stale session without proper expiry set) — refresh now
       return refreshAccessToken(token);
     },
     async session({ session, token }) {
