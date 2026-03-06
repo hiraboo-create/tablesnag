@@ -93,14 +93,17 @@ export async function connectionRoutes(fastify: FastifyInstance): Promise<void> 
         body: new URLSearchParams({ email: body.data.email, password: body.data.password }),
       });
 
-      if (res.status === 401 || res.status === 422) {
+      const resyBody = await res.text();
+      fastify.log.warn({ resyStatus: res.status, resyBody }, "Resy auth response");
+
+      if (res.status === 419 || res.status === 401 || res.status === 422) {
         return reply.status(401).send({ error: "Invalid Resy email or password", statusCode: 401 });
       }
       if (!res.ok) {
-        return reply.status(502).send({ error: "Resy login failed", statusCode: 502 });
+        return reply.status(502).send({ error: `Resy login failed (status ${res.status})`, statusCode: 502 });
       }
 
-      const data = await res.json();
+      const data = JSON.parse(resyBody);
       const token: string = data.token;
       const platformUserId = String(data.id ?? "");
 
