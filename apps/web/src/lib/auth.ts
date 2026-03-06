@@ -74,13 +74,13 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = (user as { accessToken?: string }).accessToken;
         token.refreshToken = (user as { refreshToken?: string }).refreshToken;
         token.sub = user.id;
-        token.accessTokenExpires = Date.now() + 6 * 24 * 60 * 60 * 1000; // 6 days
+        token.accessTokenExpires = Date.now() + 14 * 60 * 1000; // 14 min (API JWT is 15m)
       }
-      // Return token if still valid
-      if (Date.now() < (token.accessTokenExpires as number ?? 0)) {
+      // Return token if still valid (with 60s buffer)
+      if (Date.now() < ((token.accessTokenExpires as number ?? 0) - 60_000)) {
         return token;
       }
-      // Access token expired — refresh it
+      // Access token expired or about to — refresh it
       return refreshAccessToken(token);
     },
     async session({ session, token }) {

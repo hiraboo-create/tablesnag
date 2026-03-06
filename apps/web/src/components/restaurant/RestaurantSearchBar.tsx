@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function RestaurantSearchBar({ onSelect }: Props) {
-  const { query, setQuery, results, isLoading, resetSessionToken } = useRestaurantSearch();
+  const { query, setQuery, results, isLoading, error, resetSessionToken } = useRestaurantSearch();
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -39,6 +39,10 @@ export function RestaurantSearchBar({ onSelect }: Props) {
         <div className="absolute right-3 top-1/2 -translate-y-1/2">
           <div className="w-4 h-4 border-2 border-gray-300 border-t-red-500 rounded-full animate-spin" />
         </div>
+      )}
+
+      {error && query.length >= 2 && !isLoading && (
+        <p className="text-xs text-red-500 mt-1">{error}</p>
       )}
 
       {open && results.length > 0 && (
